@@ -1,0 +1,313 @@
+\documentclass[11pt]{article}
+
+% ---------- typography & math ----------
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm, bm, mathtools}
+\usepackage{mathrsfs}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{float}
+\bibliographystyle{unsrt}
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=black, citecolor=blue}
+
+
+% ---------- spacing ----------
+\setlength{\parskip}{0.6em}
+\setlength{\parindent}{0pt}
+
+% ---------- handy rules ----------
+\newcommand{\separator}{\vspace{0.25em}\hrule\vspace{0.25em}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textbf{University of Waterloo}}
+\fancyhead[C]{\small{\textsc{CS 680 Project}}}
+\fancyhead[R]{\textsc{Dec.7 2025}}
+\fancyfoot[C]{\thepage}
+
+% ---------- theorem environments ----------
+\newtheorem{theorem}{Theorem}
+\newtheorem{claim}{Claim}
+
+\begin{document}
+
+\begin{center}
+\begin{tabular}{@{}c@{}}
+    \textbf{\Large A Bottom-Up Survey of Transformer-Based Multimodal Models:} \\[0.4em]
+    \textbf{\Large From Model Layer to System Layer\footnotemark}
+\end{tabular}
+\end{center}
+
+\footnotetext{Parts of the ideas are inspired by my personal blog: \url{https://www.cnblogs.com/Arcticus/p/18265500}.}
+
+
+\begin{center}
+  $\ast$~$\ast$~$\ast$
+\end{center}
+
+\section{Introduction}
+
+\begin{itemize}
+\item \emph{It is well known that in the multimodal domain, Transformer-based architectures have been widely adopted for discriminative tasks such as VQA, as well as for generative tasks such as Image Captioning.}
+
+\item \emph{Modern generative models are typically categorized into NAR and AR paradigms. The former includes four major classes discussed in the lectures, namely VAEs, GANs, Normalizing Flows, and Diffusion Models, while the latter mainly refers to autoregressive Transformers, which constitute the primary focus of this survey.}
+
+\item \emph{This survey adopts a bottom-up perspective inspired by the layered design of computer networks, and systematically analyzes the commonalities and design principles of Transformer-based architectures in the multimodal field across three levels: model, agent, and system.}
+
+\end{itemize}
+
+\section{Background}
+
+\subsection{Model Layer}
+Early work such as CLIP\cite{radford2021clip} and ViT\cite{dosovitskiy2021vit} demonstrated the effectiveness of large-scale contrastive and transformer-based representation learning for visual modalities. 
+Subsequent extensions like ViLT\cite{kim2021vilt} explored fusion of vision and language encoders, reducing reliance on heavy pretraining models. 
+
+Recent vision-language fusion models have pushed this paradigm further. 
+For instance, LLaVA-1.5\cite{liu2023llava15} integrates a frozen vision encoder with an instruction-tuned LLM, enabling fine-grained visual grounding in dialogue; mPLUG-2\cite{ye2023mplug2} advances multimodal alignment through its specialized fusion and inverse-fusion operator layers.
+
+While numerous architectural variations exist across fusion mechanisms, a systematic taxonomy of backbone designs will be presented in the full paper.
+
+\subsection{Agent Layer}
+Chain-of-Thought (CoT)\cite{wei2022cot}
+, and its structured variants such as Tree-of-Thought (ToT)\cite{yao2023tot} and Graph-of-Thought (GoT)\cite{besta2024got}, introduce intermediate reasoning steps that improve multi-hop and compositional tasks. 
+Frameworks like ReAct\cite{yao2023react} and Reflexion\cite{shinn2023reflexion} combine reasoning traces with tool usage, allowing models to iteratively refine their outputs through external actions. 
+
+Retrieval-Augmented Generation incorporates external knowledge into model prompts, improving factual accuracy and adaptability. 
+Supporting infrastructure such as vector databases provides scalable semantic search, enabling multimodal models to ground outputs in large knowledge bases.
+
+\subsection{System Layer}
+LangChain represents a prominent orchestration framework, offering modular pipelines for integrating LLMs, multimodal encoders, retrieval components, and external APIs.
+
+Other workflow applications, such as ComfyUI, exemplify how modular design can facilitate extensibility and community-driven innovation.
+
+\section{Main Body}
+
+\subsection{Model Layer}
+
+\subsubsection{Upstream (Pretraining)}
+
+Transformers have many variants. AR Transformers adopt a sequential architecture similar to RNNs, whereas NAR models such as BERT\cite{devlin2019bert}
+ follow a fully parallel architecture. Interestingly, in practical settings, generative tasks typically employ only a decoder, while discriminative tasks tend to rely on a single encoder.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{src/img/pipeline.png}
+    \caption{Overall pipeline of an encoder-only multimodal Transformer\cite{kim2021vilt}.}
+\end{figure}
+
+\paragraph{Common Pretraining Objectives}
+
+\begin{itemize}[leftmargin=*]
+\item \textbf{Image–Text Matching} — Binary classification of matched/unmatched image–text pairs\\
+$$\mathcal{L}_{\text{ITM}} = -[y \log p_{\text{match}} + (1-y)\log(1 - p_{\text{match}})]$$
+
+\item \textbf{Masked Language Modeling} — Predict masked textual tokens conditioned on visual features\\
+$$\mathcal{L}_{\text{MLM}} = -\sum_{t \in \mathcal{M}} \log P(x_t \mid x_{\setminus \mathcal{M}}, v)$$
+
+\item \textbf{Word–Patch Alignment} — Align textual tokens with corresponding visual patches via cross-modal contrastive learning\\
+$$\mathcal{L}_{\text{WPA}} = -\sum_{(i,j)\in \mathcal{P}} \log 
+\frac{\exp(s(w_i, p_j)/\tau)}{\sum_{k}\exp(s(w_i, p_k)/\tau)}$$
+
+\end{itemize}
+
+\paragraph{Modality Fusion Module}
+
+In multimodal models, a critical design component lies in how different modalities are fused before being fed into subsequent encoders or decoders.
+
+The simplest strategy is to do nothing at all, as exemplified by CLIP\cite{radford2021clip}, where alignment between modalities is achieved through a contrastive learning objective applied to separate encoders. A more direct approach is feature concatenation. More sophisticated methods, such as that adopted by ViLBERT\cite{lu2019vilbert}, employ multi-layer neural networks to explicitly integrate multimodal representations before passing them to the encoders. 
+
+The complexities of different modality fusion strategies are illustrated in all possible combinations in the figure below.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{src/img/vilt.png}
+    \caption{Modality fusion modules with different parameter allocations\cite{kim2021vilt}.}
+\end{figure}
+
+For example, CLIP\cite{radford2021clip} corresponds to type (b), whereas recent multimodal systems implement (c)(d).
+
+\subsubsection{Midstream (Alignment)}
+
+In practice, explicit modality fusion at the pretraining stage is relatively rare. For the majority of existing models, modality fusion is primarily carried out during the midstream alignment stage.
+
+\paragraph{Fusion Mechanisms}
+
+The four types of attention mechanisms in multimodal models are Co-Attention, Merged Attention, Modality-Specific Attention, and Asymmetric Attention, as illustrated in the figure below.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{src/img/fusion.png}
+    \caption{Four fundamental fusion mechanisms\cite{hendricks2021decoupling}.}
+\end{figure}
+
+Although different modalities have been preliminarily aligned during the upstream stage, in the midstream or downstream phase, models typically introduce small task-specific modules or apply task-oriented modifications to the attention layers in order to better adapt to individual tasks.
+
+\paragraph{Examples of Modern Mechanisms}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Projection-based Interaction}\\
+    → \emph{e.g., LLaVA}\cite{liu2023llava}: maps visual embeddings into the LLM token space.
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.5\linewidth]{src/img/llava.png}
+        \caption{Modality interaction in LLaVA\cite{liu2023llava}
+.}
+    \end{figure}
+
+    It was the first to introduce GPT-4\cite{openai2023gpt4} as a teacher model, generating image–text pair datasets for instruction tuning training. Compared with the original version of LLaVA\cite{liu2023llava}
+, LLaVA-1.5\cite{liu2023llava15} replaced the linear projection in the alignment process with an MLP and scaled up with various new datasets.
+
+    \item \textbf{Gating Mechanisms}\\
+    → \emph{e.g., MM-CoT}\cite{zhang2023mmcot}: selectively regulate cross-modal information flow.
+
+    A gated fusion mechanism is adopted to integrate the language representation $H_{\text{language}}$ and the visual representation $H_{\text{vision}}$. The resulting fused representation $H_{\text{fuse}} \in \mathbb{R}^{n \times d}$ is computed as follows:
+\[
+\lambda = \mathrm{Sigmoid}(W_l H_{\text{language}} + W_v H_{\text{vision}}^{\text{attn}}),
+\]
+\[
+H_{\text{fuse}} = (1 - \lambda) \cdot H_{\text{language}} + \lambda \cdot H_{\text{vision}}^{\text{attn}},
+\]
+where $W_l$ and $W_v$ denote learnable parameters.
+
+
+    It serves as the SoTA model for ScienceQA in 2024.
+
+    \item \textbf{Indicator-based Fusion}\\
+    → \emph{e.g., mPLUG}\cite{ye2022mplug}: employs learned modality indicators for adaptive feature mixing.
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\linewidth]{src/img/mplug.png}
+        \caption{Modality interaction in mPLUG\cite{ye2022mplug}.}
+    \end{figure}
+    
+The translation adopts a hybrid design that combines Asymmetric Attention and Merged Attention. In the Asymmetric Attention, a fixed stride is used to skip part of the input tokens. This design is trained during both the alignment stage and the fine-tuning stage.
+
+\end{itemize}
+
+
+\subsubsection{Downstream (Fine-tuning)}
+
+After completing pretraining and alignment, the entire model can be fine-tuned using task-specific datasets.
+
+\paragraph{Fine-tuning Categories}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Prompt Tuning}\\
+    Prefix and suffix tuning are also counted as prompt tuning. Introduces a small set of learnable prompt tokens to the input sequence.
+    
+    Note that this is not prompt engineering. Instead, the input tokens undergo an explicit prompt optimization process as part of the model before being fed into the subsequent encoder.
+
+    \item \textbf{Instruction Tuning}\\
+    Fine-tunes the model on instruction–response pairs to align with human-style commands.
+    
+    This is arguably one of the most common paradigms among all fine-tuning approaches, and it is also frequently associated with methods such as RL and RLHF.
+
+    \item \textbf{Adapter Tuning}\\
+    Inserts lightweight adapter modules into each Transformer block.
+    
+    This is a commonly adopted parameter-efficient training strategy, where lightweight modules are inserted between layers while the remaining parameters are kept frozen. It serves as a practical and effective solution under low-compute-resource settings.
+
+    \item \textbf{LoRA Tuning}\\
+    Decomposes the weight update matrices into low-rank components that are trained while keeping the original model weights frozen.
+    
+    The detailed underlying principles are related to optimization theory and are typically covered in specialized optimization courses. In practice, this category includes a wide range of algorithms, and different methods are adopted depending on the specific conditions and constraints.
+\end{itemize}
+
+\paragraph{Parameter Optimization Strategies}
+
+A critical design decision involves determining which modules to freeze during fine-tuning.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{src/img/training.png}
+    \caption{An overview of four common parameter optimization strategies for fine-tuning\cite{ye2023mplugowl}.}
+\end{figure}
+
+
+\subsection{Agent Layer}
+
+\subsubsection{Agents}
+
+The above discussion focuses on the model-structure level. In contrast, an agent is defined as an integrated object composed of one or multiple models and external tools. These external tools include reasoning chains, memory, databases, and related components. It should be noted that this definition of an agent is different from that in RL.
+
+\subsubsection{External Tools}
+
+\begin{itemize}[leftmargin=*]
+
+\item \textbf{ReAct\cite{yao2023react}} \\
+ReAct\cite{yao2023react} is an agent interaction paradigm that interleaves explicit reasoning with external action execution.
+
+The ReAct\cite{yao2023react} model operates in a continuous loop of Thought $\rightarrow$ Action $\rightarrow$ Observation.
+
+\item \textbf{CoT\cite{wei2022cot}
+} \\
+Chain-of-Thought is a prompting strategy that elicits explicit intermediate reasoning steps from large language models.
+
+Although numerous variants have been proposed, such as Tree-of-Thoughts\cite{yao2023tot}, Graph-of-Thoughts\cite{besta2024got}, and even cyclic decision-making schemes, these methods fundamentally remain within the scope of pure prompt engineering.
+
+\item \textbf{Vector Database} \\
+A vector database is a specialized database system designed for storing, indexing, and efficiently retrieving high-dimensional vector embeddings based on similarity search.
+
+It serves as a core infrastructure for semantic retrieval, long-term memory, and retrieval-augmented generation in modern LLM-based systems.
+
+\item \textbf{RAG} \\
+Retrieval-Augmented Generation is a framework that integrates external knowledge retrieval with generative modeling, where relevant information is first retrieved from a knowledge source such as a vector database and then fused into the input of a language model to condition the generation process.
+
+Common forms of RAG include conventional vector-based retrieval RAG, as well as more modern approaches such as GraphRAG\cite{edge2024graphrag}\footnote{Due to space limitations, a detailed blog post on GraphRAG has been written by me: \url{https://www.cnblogs.com/Arcticus/p/18344606}.}
+based on graph algorithms.
+
+
+\end{itemize}
+
+
+
+
+\subsection{System Layer}
+
+As expected (analogous to the relationship between models and agents), the system layer integrates one or multiple agents into a unified large-scale system. Each agent, as a constituent component of the system, plays its own functional role, and can be organized in either a sequential or a parallel manner to accomplish tasks collaboratively. From the designer’s perspective, this layer is more closely related to software engineering, particularly the paradigm of Software as a Service (SaaS).
+
+\subsubsection{Notion of Workflow}
+
+At the system level, the entire architecture is often described in terms of a \emph{workflow}. Moreover, the VQA systems that users actually interact with in practice require comprehensive service-level support, rather than being limited to the invocation of a single agent or model API.
+
+It is natural to construct task-specific workflows that can be reused by different users under varying initial conditions or contexts. Users neither need nor are expected to understand the underlying code below the agent level; instead, they only need to be aware of the expected inputs and outputs of an agent or model, as well as the functionality of each module as described through natural language.
+
+\subsubsection{Common System Frameworks}
+
+\begin{itemize}[leftmargin=*]
+
+\item \emph{LangChain} is one of the most widely adopted and lightweight frameworks for organizing LLMs. It is typically designed for a single-agent setting and follows a canonical interaction pattern: User $\rightarrow$ LLM Agent $\leftrightarrow$ Tools $\rightarrow$ Output.
+
+\item \emph{AutoGen}\cite{wu2023autogen} follows a multi-agent interaction pipeline, typically structured as: User $\rightarrow$ Planner Agent $\rightarrow$ Coder Agent $\rightarrow$ Critic Agent $\rightarrow$ Tool Agent, where each agent internally consists of one or multiple core models augmented with its own role-specific set of tools.
+
+\end{itemize}
+
+\section{Conclusion}
+
+From a systematic perspective, this survey organizes the framework of modern popular multimodal models into three hierarchical layers: the model layer, the agent layer, and the system layer.
+
+At the model layer, the discussion is structured around the upstream–midstream–downstream pipeline, corresponding to the stages of pretraining, alignment, and fine-tuning. Each stage is illustrated with representative models, explaining how multiple modalities are jointly integrated, and how the resulting hidden representations are processed through diverse and sophisticated architectures to support different multimodal tasks.
+
+At the agent layer, I first define an agent as an integration of a model and external tools. I then introduce representative techniques such as ReAct\cite{yao2023react}, CoT\cite{wei2022cot}
+, Vector Databases, and Retrieval-Augmented Generation, to demonstrate how these tools can substantially enhance the capability of a model in solving specific tasks.
+
+At the system layer, I explain the concept of workflow and provide practical examples to illustrate how one or multiple agents can be composed into a complete agent system. Typical cases include the single-agent paradigm adopted by LangChain, as well as the multi-agent collaboration paradigm exemplified by AutoGen\cite{wu2023autogen}.
+
+\begin{center}
+  $\ast$~$\ast$~$\ast$
+\end{center}
+
+\emph{This survey is compiled based on a review of around 20 research papers. It serves not only as the final project for the course CS 680, but also as a structured summary of my understanding of transformer-based multimodal models, ranging from low-level model architectures to high-level application systems. Through the process of studying the literature, comparing different approaches, and identifying both the similarities and differences among various works, I have gained substantial insights into this research field.}
+
+\newpage
+
+\bibliography{src/references}
+
+
+\end{document}
